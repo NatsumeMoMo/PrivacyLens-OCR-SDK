@@ -59,9 +59,21 @@ BackendInfo StubOcrBackend::backend_info() const
     return info;
 }
 
-OcrResult StubOcrBackend::recognize(const ImageView& image) const
+BackendCapabilities StubOcrBackend::capabilities() const
+{
+    BackendCapabilities capabilities;
+    capabilities.accepts_memory_input = true;
+    capabilities.returns_source_space_bbox = true;
+    capabilities.returns_source_space_quad = true;
+    capabilities.returns_confidence = true;
+    capabilities.supports_line_boxes = true;
+    return capabilities;
+}
+
+OcrResult StubOcrBackend::recognize(const OcrRequest& request) const
 {
     const auto started_at = std::chrono::steady_clock::now();
+    const auto& image = request.image;
 
     OcrResult result;
     result.backend = backend_info();

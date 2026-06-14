@@ -52,3 +52,17 @@ add_test(NAME pl_ocr_cli_self_test COMMAND pl-ocr-cli --self-test)
 add_test(NAME pl_ocr_cli_stub_self_test COMMAND pl-ocr-cli --backend stub --self-test)
 add_test(NAME pl_ocr_cli_rapidocr_unconfigured
     COMMAND pl-ocr-cli --backend rapidocr_onnx --model-dir "${CMAKE_CURRENT_BINARY_DIR}/missing-models" --self-test --expect-status model-not-configured)
+
+add_executable(pl-ocr-adapter-contract-tests
+    tests/adapter_contract_tests.cpp
+    src/core/ocr_engine.cpp
+    src/backends/stub/stub_ocr_backend.cpp
+    src/backends/rapidocr_onnx/rapidocr_onnx_backend.cpp)
+target_include_directories(pl-ocr-adapter-contract-tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(MSVC)
+    target_compile_options(pl-ocr-adapter-contract-tests PRIVATE /W4 /permissive- /EHsc /Zc:__cplusplus /MP)
+endif()
+add_test(NAME pl_ocr_adapter_contract_tests COMMAND pl-ocr-adapter-contract-tests)

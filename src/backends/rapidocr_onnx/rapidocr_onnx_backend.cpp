@@ -358,12 +358,25 @@ public:
         return info;
     }
 
-    [[nodiscard]] OcrResult recognize(const ImageView& image) const
+    [[nodiscard]] BackendCapabilities capabilities() const
+    {
+        BackendCapabilities capabilities;
+        capabilities.accepts_memory_input = true;
+        capabilities.returns_source_space_bbox = true;
+        capabilities.returns_source_space_quad = true;
+        capabilities.returns_confidence = true;
+        capabilities.supports_orientation = true;
+        capabilities.supports_line_boxes = true;
+        return capabilities;
+    }
+
+    [[nodiscard]] OcrResult recognize(const OcrRequest& request) const
     {
         if (handle_ == nullptr) {
             throw OcrError(ErrorCode::backend_unavailable, "rapidocr_onnx backend is not initialized");
         }
 
+        const auto& image = request.image;
         const auto total_start = std::chrono::steady_clock::now();
         const auto preprocess_start = std::chrono::steady_clock::now();
         auto rgba = bgra_to_rgba_contiguous(image);
@@ -446,9 +459,14 @@ BackendInfo RapidOcrOnnxBackend::backend_info() const
     return impl_->backend_info();
 }
 
-OcrResult RapidOcrOnnxBackend::recognize(const ImageView& image) const
+BackendCapabilities RapidOcrOnnxBackend::capabilities() const
 {
-    return impl_->recognize(image);
+    return impl_->capabilities();
+}
+
+OcrResult RapidOcrOnnxBackend::recognize(const OcrRequest& request) const
+{
+    return impl_->recognize(request);
 }
 
 }  // namespace plocr

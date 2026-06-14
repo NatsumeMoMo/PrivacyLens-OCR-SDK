@@ -24,6 +24,21 @@ struct ImageView {
     PixelFormat pixel_format = PixelFormat::bgra8;
 };
 
+struct OcrRequest {
+    ImageView image;
+};
+
+struct BackendCapabilities {
+    bool accepts_memory_input = false;
+    bool requires_filesystem_input = false;
+    bool returns_source_space_bbox = false;
+    bool returns_source_space_quad = false;
+    bool returns_confidence = false;
+    bool supports_orientation = false;
+    bool supports_line_boxes = false;
+    bool supports_word_boxes = false;
+};
+
 struct Rect {
     float x = 0.0F;
     float y = 0.0F;

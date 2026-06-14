@@ -36,9 +36,16 @@ BackendInfo OcrEngine::backend_info() const
     return backend_->backend_info();
 }
 
+BackendCapabilities OcrEngine::backend_capabilities() const
+{
+    return backend_->capabilities();
+}
+
 OcrResult OcrEngine::recognize(const ImageView& image) const
 {
-    return backend_->recognize(image);
+    OcrRequest request;
+    request.image = image;
+    return backend_->recognize(request);
 }
 
 }  // namespace plocr

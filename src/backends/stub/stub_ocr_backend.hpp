@@ -8,7 +8,8 @@ namespace plocr {
 class StubOcrBackend final : public IOcrBackend {
 public:
     [[nodiscard]] BackendInfo backend_info() const override;
-    [[nodiscard]] OcrResult recognize(const ImageView& image) const override;
+    [[nodiscard]] BackendCapabilities capabilities() const override;
+    [[nodiscard]] OcrResult recognize(const OcrRequest& request) const override;
 };
 
 }  // namespace plocr

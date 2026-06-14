@@ -13,6 +13,7 @@ public:
     explicit OcrEngine(const OcrEngineOptions& options = {});
 
     [[nodiscard]] BackendInfo backend_info() const;
+    [[nodiscard]] BackendCapabilities backend_capabilities() const;
     [[nodiscard]] OcrResult recognize(const ImageView& image) const;
 
 private:
