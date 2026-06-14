@@ -16,10 +16,14 @@ real OCR models, real screenshots, or large runtime binaries to Git.
   prebuilt DLL does not export the bbox-capable `OcrDetectInput` /
   `OcrFreeResult` C API found in current source, so configured real OCR returns
   `PL_OCR_STATUS_BACKEND_UNAVAILABLE` instead of silently dropping bbox data.
+- Spike Result: `paddleocr_onnx` backend can run PP-OCRv6 small detection and
+  recognition ONNX models through ONNX Runtime on synthetic safe self-test
+  images. The backend is still a first integration pass with SDK-owned
+  preprocessing/postprocessing, not a full PaddleOCR C++ runtime embedding.
 - Proposed: PrivacyLens will load the SDK DLL at runtime instead of linking OCR
   inference code into the main application.
-- Deferred: Build a bbox-capable RapidOcrOnnx C DLL from source or switch to a
-  different OCR runtime adapter before claiming real OCR boxes are available.
+- Deferred: Harden PaddleOCR postprocessing, benchmark against screen captures,
+  and decide whether RapidOcrOnnx remains useful after the PaddleOCR ONNX path.
 
 ## Build
 
@@ -35,6 +39,20 @@ Known local CMake path if `cmake` is not on `PATH`:
 ```powershell
 & 'C:\Software\CMake\bin\cmake.exe' -S . -B build -G "Visual Studio 18 2026" -A x64
 & 'C:\Software\CMake\bin\cmake.exe' --build build --config Debug
+```
+
+The current `paddleocr_onnx` backend expects ONNX Runtime headers/import library
+under:
+
+```text
+D:\Atlas\Artifacts\ThirdParty\PrivacyLens-OCR-SDK\ONNXRuntime\onnxruntime-win-x64-1.26.0\package\onnxruntime-win-x64-1.26.0
+```
+
+Override with CMake if needed:
+
+```powershell
+& 'C:\Software\CMake\bin\cmake.exe' -S . -B build -G "Visual Studio 18 2026" -A x64 `
+  -DPL_OCR_ONNXRUNTIME_ROOT=<path-to-onnxruntime-win-x64>
 ```
 
 Expected Debug outputs:
@@ -65,6 +83,8 @@ Real-backend CLI shape:
 ```powershell
 .\build\Debug\pl-ocr-cli.exe --backend rapidocr_onnx --model-dir <path> --image <path> [--print-text]
 .\build\Debug\pl-ocr-cli.exe --backend rapidocr_onnx --model-dir <path> --self-test [--print-text]
+.\build\Debug\pl-ocr-cli.exe --backend paddleocr_onnx --model-dir <path> --image <path> [--print-text]
+.\build\Debug\pl-ocr-cli.exe --backend paddleocr_onnx --model-dir <path> --self-test [--print-text]
 ```
 
 `--image` uses Windows WIC and does not require OpenCV. OCR text from image
@@ -146,6 +166,45 @@ Runtime lookup order:
 Current Spike Result: the SDK adapter requires the bbox-capable
 `OcrDetectInput` API. The downloaded RapidOcrOnnx 1.2.2 prebuilt DLL exports
 only the older file-path API, so it is treated as backend unavailable.
+
+## PaddleOCR ONNX Backend
+
+The optional backend name is `paddleocr_onnx` (alias: `paddleocr`). Select it via
+`pl_ocr_context_options.requested_backend_utf8` and pass the model directory via
+`pl_ocr_context_options.model_dir_utf8`.
+
+Current local model profile:
+
+```text
+D:\Atlas\Artifacts\Models\PrivacyLens-OCR-SDK\PaddleOCR\PP-OCRv6-small-onnx
+```
+
+Expected model directory:
+
+```text
+det/model.onnx
+det/inference.yml
+rec/model.onnx
+rec/inference.yml
+manifest.json
+```
+
+Current implementation shape:
+
+- Uses ONNX Runtime CPU execution provider.
+- Accepts caller BGRA8 memory input.
+- Runs PP-OCRv6 small detector and recognizer ONNX models.
+- Uses SDK-owned detector postprocessing based on probability-map connected
+  components and axis-aligned crops.
+- Decodes recognizer output with the CTC dictionary embedded in
+  `rec/inference.yml`.
+- Returns SDK-normalized text, confidence, bbox, quad, and latency.
+
+Example local smoke test:
+
+```powershell
+.\build\Debug\pl-ocr-cli.exe --backend paddleocr_onnx --model-dir D:\Atlas\Artifacts\Models\PrivacyLens-OCR-SDK\PaddleOCR\PP-OCRv6-small-onnx --self-test --print-text
+```
 
 ## Repository Boundary
 
