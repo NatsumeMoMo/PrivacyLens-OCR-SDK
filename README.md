@@ -1,223 +1,155 @@
-# PrivacyLens-OCR-SDK
+# PrivacyLens Engine SDK
 
-PrivacyLens-OCR-SDK is an OCR-only Windows SDK boundary for PrivacyLens. It
-builds a small DLL with a stable C ABI, a stub OCR backend, and a real-backend
-spike behind the same ABI. It does not commit RapidOCR, ONNX Runtime, OpenCV,
-real OCR models, real screenshots, or large runtime binaries to Git.
+PrivacyLens Engine SDK is the local redaction-decision boundary for
+PrivacyLens. It builds `PrivacyLensEngine.dll`, exposes a direct-export C ABI in
+`include/pl_engine.h`, and returns source-frame mask rectangles that the
+PrivacyLens main application can render over its sanitized preview.
 
-## Status
+The SDK no longer treats full-screen OCR as the public product boundary. OCR
+code from the earlier spike remains in the repository for future provider work,
+but the current build surface is the Engine SDK:
 
-- Spike Result: CMake project skeleton, C ABI header, DLL target, stub backend,
-  and CLI self-test are present.
-- Spike Result: `rapidocr_onnx` backend selection, model-dir validation, dynamic
-  RapidOcrOnnx loading, WIC image decode in the CLI, and unconfigured-state
-  tests are present.
-- Spike Result: RapidOcrOnnx 1.2.2 `windows-clib` loads as an artifact, but its
-  prebuilt DLL does not export the bbox-capable `OcrDetectInput` /
-  `OcrFreeResult` C API found in current source, so configured real OCR returns
-  `PL_OCR_STATUS_BACKEND_UNAVAILABLE` instead of silently dropping bbox data.
-- Spike Result: `paddleocr_onnx` backend can run PP-OCRv6 small detection and
-  recognition ONNX models through ONNX Runtime on synthetic safe self-test
-  images. The backend is still a first integration pass with SDK-owned
-  preprocessing/postprocessing, not a full PaddleOCR C++ runtime embedding.
-- Proposed: PrivacyLens will load the SDK DLL at runtime instead of linking OCR
-  inference code into the main application.
-- Deferred: Harden PaddleOCR postprocessing, benchmark against screen captures,
-  and decide whether RapidOcrOnnx remains useful after the PaddleOCR ONNX path.
+```text
+runtime policy + frame context
+  -> provider dispatch
+  -> latest mask list
+```
+
+## Current Status
+
+- Spike Result: direct-export C ABI is present in `include/pl_engine.h`.
+- Spike Result: `PrivacyLensEngine.dll` builds with CMake / MSVC / x64.
+- Spike Result: `pl-engine-cli --self-test --mask-wechat` creates an
+  engine/session, pushes a runtime policy, submits monitor-frame context, and
+  prints privacy-safe mask counts.
+- Spike Result: `AppWindowProvider` can detect visible WeChat / Weixin
+  top-level window fragments through Win32/DWM geometry and z-order occlusion.
+- Deferred: OCR provider, YOLO provider, manual-region provider, policy files,
+  GPU frame input, and main-project rendering integration.
 
 ## Build
 
 Preferred local baseline:
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 18 2026" -A x64
-cmake --build build --config Debug
-```
-
-Known local CMake path if `cmake` is not on `PATH`:
-
-```powershell
-& 'C:\Software\CMake\bin\cmake.exe' -S . -B build -G "Visual Studio 18 2026" -A x64
-& 'C:\Software\CMake\bin\cmake.exe' --build build --config Debug
-```
-
-The current `paddleocr_onnx` backend expects ONNX Runtime headers/import library
-under:
-
-```text
-D:\Atlas\Artifacts\ThirdParty\PrivacyLens-OCR-SDK\ONNXRuntime\onnxruntime-win-x64-1.26.0\package\onnxruntime-win-x64-1.26.0
-```
-
-Override with CMake if needed:
-
-```powershell
-& 'C:\Software\CMake\bin\cmake.exe' -S . -B build -G "Visual Studio 18 2026" -A x64 `
-  -DPL_OCR_ONNXRUNTIME_ROOT=<path-to-onnxruntime-win-x64>
+& 'C:\Software\CMake\bin\cmake.exe' -S . -B build-engine -G "Visual Studio 18 2026" -A x64
+& 'C:\Software\CMake\bin\cmake.exe' --build build-engine --config Debug
 ```
 
 Expected Debug outputs:
 
 ```text
-build/Debug/PrivacyLensOcr.dll
-build/Debug/PrivacyLensOcr.lib
-build/Debug/pl-ocr-cli.exe
+build-engine/Debug/PrivacyLensEngine.dll
+build-engine/Debug/PrivacyLensEngine.lib
+build-engine/Debug/pl-engine-cli.exe
 ```
 
 ## Smoke Test
 
 ```powershell
-.\build\Debug\pl-ocr-cli.exe --self-test
-.\build\Debug\pl-ocr-cli.exe --backend stub --self-test
+.\build-engine\Debug\pl-engine-cli.exe --self-test --mask-wechat
 ```
 
 Expected behavior:
 
-- Gets the v1 function table through `pl_ocr_get_api`.
-- Creates a stub context.
-- Creates an in-memory BGRA8 test image.
-- Runs OCR through the DLL boundary.
-- Prints backend info, box count, latency, and fake OCR text.
+- Creates an engine.
+- Creates a session.
+- Pushes a runtime policy with WeChat masking enabled.
+- Submits a monitor-frame context.
+- Returns the latest mask list.
+- Prints only SDK status, policy generation, option state, and mask count.
 
-Real-backend CLI shape:
-
-```powershell
-.\build\Debug\pl-ocr-cli.exe --backend rapidocr_onnx --model-dir <path> --image <path> [--print-text]
-.\build\Debug\pl-ocr-cli.exe --backend rapidocr_onnx --model-dir <path> --self-test [--print-text]
-.\build\Debug\pl-ocr-cli.exe --backend paddleocr_onnx --model-dir <path> --image <path> [--print-text]
-.\build\Debug\pl-ocr-cli.exe --backend paddleocr_onnx --model-dir <path> --self-test [--print-text]
-```
-
-`--image` uses Windows WIC and does not require OpenCV. OCR text from image
-files is hidden by default; pass `--print-text` only for explicit local smoke
-tests with safe synthetic inputs.
+The mask count depends on the current desktop. If no visible WeChat / Weixin
+window is present on the primary monitor, `masks=0` is valid.
 
 ## Public ABI
 
-The public header is `include/pl_ocr.h`.
+The public header is:
 
-The only exported entry point is:
+```text
+include/pl_engine.h
+```
+
+The first direct-export functions are:
 
 ```c
-pl_ocr_status pl_ocr_get_api(uint32_t requested_version, pl_ocr_api_v1* out_api);
+pl_engine_create
+pl_engine_destroy
+pl_engine_session_create
+pl_engine_session_destroy
+pl_engine_session_update_policy
+pl_engine_session_submit_frame
+pl_engine_session_get_latest_masks
+pl_engine_mask_list_destroy
+pl_engine_get_last_error
+pl_engine_status_to_string
 ```
 
-The v1 function table includes:
+The public ABI uses only C-compatible scalar types, pointers, plain structs,
+opaque handles, and exported C functions. It does not expose Qt types, STL
+containers, C++ classes, C++ exceptions, ONNX Runtime, PaddleOCR, or Win32 C++
+wrappers.
 
-- `get_abi_version`
-- `get_sdk_version`
-- `create_context`
-- `destroy_context`
-- `get_backend_info`
-- `recognize_image`
-- `destroy_result`
-- `get_last_error`
-- `status_to_string`
+## Runtime Policy Boundary
 
-The public ABI uses only C-compatible scalar types, pointers, plain structs, and
-function pointers. It does not expose Qt types, STL containers, C++ classes, C++
-exceptions, or memory that callers must release through their own CRT.
+The PrivacyLens main application owns user settings and persistent
+configuration. The SDK does not read user config files. Runtime truth is the
+latest `pl_engine_policy` pushed through:
 
-## Memory And Lifetime Rules
+```c
+pl_engine_session_update_policy(session, &policy);
+```
 
-- Caller owns `pl_ocr_image.data`; it only needs to remain valid for the
-  duration of `recognize_image`.
-- SDK allocates `pl_ocr_context`; caller releases it with `destroy_context`.
-- SDK allocates `pl_ocr_result`; caller releases it with `destroy_result`.
-- Result strings and `boxes` are valid until `destroy_result`.
-- Backend info strings are owned by the SDK and must not be freed by caller.
-- Last-error strings are valid until the next SDK call on the same context, or
-  until the context is destroyed.
-- If `pl_ocr_get_api` receives an unsupported ABI version, it clears `out_api`
-  and returns `PL_OCR_STATUS_UNSUPPORTED_ABI`.
-
-## Stub Backend
-
-The current backend name is `stub`, with model version `stub-v1`. For any valid
-BGRA8 image it returns three fixed fake OCR boxes:
-
-- `sk-demo-REDACTED-1234`
-- `demo@example.com`
-- `+1 555 0100`
-
-These strings are synthetic test data. They are not real credentials or real
-personal information.
-
-## RapidOCR ONNX Spike
-
-The optional backend name is `rapidocr_onnx` (alias: `rapidocr`). Select it via
-`pl_ocr_context_options.requested_backend_utf8` and pass the model directory via
-`pl_ocr_context_options.model_dir_utf8`.
-
-Expected model directory:
+The MVP policy contains one active option:
 
 ```text
-ch_PP-OCRv3_det_infer.onnx
-ch_ppocr_mobile_v2.0_cls_infer.onnx
-ch_PP-OCRv3_rec_infer.onnx
-ppocr_keys_v1.txt
+mask_app_wechat
 ```
 
-Runtime lookup order:
+Future options can enable OCR, YOLO, manual-region, QR, face, or other provider
+families without changing the main app's ownership of product settings.
 
-1. `PRIVACYLENS_OCR_RAPIDOCRONNX_DIR`
-2. `<model_dir>\RapidOcrOnnx.dll` or `<model_dir>\bin\RapidOcrOnnx.dll`
-3. Atlas artifact default path under `D:\Atlas\Artifacts\ThirdParty\PrivacyLens-OCR-SDK\...`
+## WeChat App-Window Provider
 
-Current Spike Result: the SDK adapter requires the bbox-capable
-`OcrDetectInput` API. The downloaded RapidOcrOnnx 1.2.2 prebuilt DLL exports
-only the older file-path API, so it is treated as backend unavailable.
-
-## PaddleOCR ONNX Backend
-
-The optional backend name is `paddleocr_onnx` (alias: `paddleocr`). Select it via
-`pl_ocr_context_options.requested_backend_utf8` and pass the model directory via
-`pl_ocr_context_options.model_dir_utf8`.
-
-Current local model profile:
+The current provider implements the geometry approach tested in
+`D:\Atlas\Labs\WgcQtWechatBox`:
 
 ```text
-D:\Atlas\Artifacts\Models\PrivacyLens-OCR-SDK\PaddleOCR\PP-OCRv6-small-onnx
+EnumWindows
+  -> filter visible, non-minimized, non-cloaked top-level windows
+  -> match process names: wechat.exe / weixin.exe
+  -> get visual bounds through DWM extended frame bounds
+  -> subtract higher z-order occluders
+  -> intersect with captured monitor
+  -> map visible fragments into source-frame coordinates
+  -> emit app_wechat masks
 ```
 
-Expected model directory:
+This provider does not inspect pixels and does not run OCR. It returns zero
+masks when WeChat is closed, minimized, fully covered, outside the captured
+monitor, or disabled by policy.
 
-```text
-det/model.onnx
-det/inference.yml
-rec/model.onnx
-rec/inference.yml
-manifest.json
-```
-
-Current implementation shape:
-
-- Uses ONNX Runtime CPU execution provider.
-- Accepts caller BGRA8 memory input.
-- Runs PP-OCRv6 small detector and recognizer ONNX models.
-- Uses SDK-owned detector postprocessing based on probability-map connected
-  components and axis-aligned crops.
-- Decodes recognizer output with the CTC dictionary embedded in
-  `rec/inference.yml`.
-- Returns SDK-normalized text, confidence, bbox, quad, and latency.
-
-Example local smoke test:
+## Tests
 
 ```powershell
-.\build\Debug\pl-ocr-cli.exe --backend paddleocr_onnx --model-dir D:\Atlas\Artifacts\Models\PrivacyLens-OCR-SDK\PaddleOCR\PP-OCRv6-small-onnx --self-test --print-text
+& 'C:\Software\CMake\bin\ctest.exe' --test-dir build-engine -C Debug --output-on-failure
 ```
+
+Current tests cover:
+
+- visible-region rectangle subtraction;
+- monitor-to-frame coordinate mapping;
+- policy/session C ABI behavior;
+- SDK mask-list ownership;
+- WeChat provider mask materialization from visible fragments;
+- CLI self-test.
 
 ## Repository Boundary
 
-This repository is for OCR SDK work only. It should not contain PrivacyLens UI,
-capture, masking, policy, OBS integration, or general inference SDK code. The
-PrivacyLens main project should later consume the SDK through runtime DLL
-loading.
+This repository owns the Engine SDK and provider implementations. The
+PrivacyLens main application remains responsible for Windows Graphics Capture,
+preview rendering, UI settings, OBS-facing sanitized output, and persistent
+user configuration.
 
-See:
-
-- `docs/architecture.md`
-- `docs/dynamic-loading.md`
-- `docs/artifact-policy.md`
-- `docs/backend-roadmap.md`
-- `docs/real-backend-spike.md`
-- `docs/artifact-manifest-rapidocr-onnx.md`
+Heavy models, runtime packages, generated binaries, real screenshots, and raw
+OCR output must stay out of Git and under Atlas Artifacts when needed.
