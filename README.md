@@ -5,9 +5,10 @@ PrivacyLens. It builds `PrivacyLensEngine.dll`, exposes a direct-export C ABI in
 `include/pl_engine.h`, and returns source-frame mask rectangles that the
 PrivacyLens main application can render over its sanitized preview.
 
-The SDK no longer treats full-screen OCR as the public product boundary. OCR
-code from the earlier spike remains in the repository for future provider work,
-but the current build surface is the Engine SDK:
+The SDK no longer treats full-screen OCR as the public product boundary. The
+earlier OCR-only ABI, OCR engine, OCR backends, and OCR CLI have been removed
+from the active repository surface. Future OCR work should enter through an
+Engine provider/backend design, not through the old `pl_ocr` SDK shape:
 
 ```text
 runtime policy + frame context
@@ -25,7 +26,8 @@ runtime policy + frame context
 - Spike Result: `AppWindowProvider` can detect visible WeChat / Weixin
   top-level window fragments through Win32/DWM geometry and z-order occlusion.
 - Deferred: OCR provider, YOLO provider, manual-region provider, policy files,
-  GPU frame input, and main-project rendering integration.
+  GPU frame input, packaged runtime manifests, and broader main-project
+  rendering integration.
 
 ## Build
 
@@ -69,6 +71,8 @@ The public header is:
 ```text
 include/pl_engine.h
 ```
+
+There is no supported `pl_ocr.h` public header in the Engine SDK line.
 
 The first direct-export functions are:
 
@@ -146,10 +150,13 @@ Current tests cover:
 
 ## Repository Boundary
 
-This repository owns the Engine SDK and provider implementations. The
-PrivacyLens main application remains responsible for Windows Graphics Capture,
-preview rendering, UI settings, OBS-facing sanitized output, and persistent
-user configuration.
+This repository owns the Engine SDK and provider implementations. Provider
+internals may later use private backend interfaces for OCR, YOLO, or other
+model/runtime families, but those backends must not become public ABI.
+
+The PrivacyLens main application remains responsible for Windows Graphics
+Capture, preview rendering, UI settings, OBS-facing sanitized output, and
+persistent user configuration.
 
 Heavy models, runtime packages, generated binaries, real screenshots, and raw
 OCR output must stay out of Git and under Atlas Artifacts when needed.
